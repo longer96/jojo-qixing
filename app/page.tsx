@@ -1,22 +1,8 @@
 import Link from "next/link";
-import { DEFAULT_MODEL, isMockMode } from "@/lib/xai";
 
 export default function HomePage() {
-  const mock = isMockMode();
-
   return (
     <div className="space-y-10">
-      {mock ? (
-        <div className="rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
-          已开启 <code className="mx-1">MOCK_AI</code>，使用本地模拟回复。
-        </div>
-      ) : (
-        <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
-          已接入 <code className="mx-1">{DEFAULT_MODEL}</code>
-          （token.xjjj.co；原 Qwen3.8-27B 当前不稳定，已自动切换可用同系模型）
-        </div>
-      )}
-
       <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl shadow-cyan-950/40 sm:p-12">
         <p className="text-sm font-medium tracking-widest text-cyan-300/90">
           运营「星」大脑 · 第一阶段

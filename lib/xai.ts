@@ -1,15 +1,35 @@
 import type { ModelMessage } from "ai";
 
-/** 固定网关与密钥（按产品要求写死） */
-export const API_BASE_URL = "https://token.xjjj.co/v1";
-export const API_KEY =
-  "sk-5tuyolPmp3gIuz3xM2Y9ElYreN6E4hxehugPFpb3HsJk7G0R";
-
 /**
- * 主模型 Qwen3.8-27B 当前网关经常无响应（curl 40s 超时、0 字节）。
- * 同系列可用模型：Qwen3.8-27B-dflash2 / qwen3.8-flash
+ * AI 配置一律来自环境变量，禁止把密钥写进代码仓库。
+ * 本地：复制 `.env.example` 为 `.env.local` 后填写 AI_API_KEY
  */
-export const DEFAULT_MODEL = "Qwen3.8-27B-dflash2";
+export function getApiBaseUrl() {
+  return (
+    process.env.AI_API_BASE_URL?.trim() ||
+    process.env.OPENAI_BASE_URL?.trim() ||
+    "https://token.xjjj.co/v1"
+  ).replace(/\/$/, "");
+}
+
+export function getApiKey() {
+  return (
+    process.env.AI_API_KEY?.trim() ||
+    process.env.OPENAI_API_KEY?.trim() ||
+    ""
+  );
+}
+
+export function getDefaultModel() {
+  return (
+    process.env.AI_MODEL?.trim() ||
+    "Qwen3.8-27B-dflash2"
+  );
+}
+
+/** @deprecated 使用 getDefaultModel()；保留兼容页面展示 */
+export const DEFAULT_MODEL = process.env.AI_MODEL?.trim() || "Qwen3.8-27B-dflash2";
+
 export const FALLBACK_MODELS = ["qwen3.8-flash", "Qwen3.8-27B"] as const;
 
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -19,7 +39,35 @@ export function isMockMode() {
 }
 
 export function hasApiKey() {
-  return Boolean(API_KEY);
+  return Boolean(getApiKey());
+}
+
+export type AiConfigStatus =
+  | { kind: "ready"; model: string; baseUrl: string }
+  | { kind: "mock"; model: string }
+  | { kind: "missing_key" };
+
+export function getAiConfigStatus(): AiConfigStatus {
+  if (isMockMode()) {
+    return { kind: "mock", model: "mock" };
+  }
+  if (!hasApiKey()) {
+    return { kind: "missing_key" };
+  }
+  return {
+    kind: "ready",
+    model: getDefaultModel(),
+    baseUrl: getApiBaseUrl(),
+  };
+}
+
+export function assertAiReady() {
+  if (isMockMode()) return;
+  if (!hasApiKey()) {
+    throw new Error(
+      "未配置 AI_API_KEY。请复制 .env.example 为 .env.local，填写密钥后重启服务。",
+    );
+  }
 }
 
 type ChatMessageParam = {
@@ -62,13 +110,15 @@ async function callChatCompletions(params: {
   temperature: number;
   stream: boolean;
 }): Promise<Response> {
+  const apiKey = getApiKey();
+  const baseUrl = getApiBaseUrl();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const res = await fetch(`${API_BASE_URL}/chat/completions`, {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -150,7 +200,7 @@ async function completeWithFallback(params: {
   messages: ChatMessageParam[];
   temperature: number;
 }): Promise<{ text: string; model: string }> {
-  const models = [DEFAULT_MODEL, ...FALLBACK_MODELS];
+  const models = [getDefaultModel(), ...FALLBACK_MODELS];
   const errors: string[] = [];
   for (const model of models) {
     try {
@@ -171,7 +221,6 @@ function textToStreamResult(text: string, model: string) {
   return {
     model,
     textStream: (async function* () {
-      // 模拟流式，改善前端体验；网关非流式更稳定
       const chunkSize = 8;
       for (let i = 0; i < text.length; i += chunkSize) {
         yield text.slice(i, i + chunkSize);
@@ -189,6 +238,7 @@ export async function chatStream(params: {
   if (isMockMode()) {
     return mockStream(params.system, params.messages);
   }
+  assertAiReady();
 
   const messages = toApiMessages(params.system, params.messages);
   const { text, model } = await completeWithFallback({
@@ -206,6 +256,7 @@ export async function chatText(params: {
   if (isMockMode()) {
     return mockEvaluateOrText(params.system, params.prompt);
   }
+  assertAiReady();
 
   const { text } = await completeWithFallback({
     messages: [

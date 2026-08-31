@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
+import { ConfigBanner } from "@/components/ConfigBanner";
 import { Nav } from "@/components/Nav";
 import "./globals.css";
+
+// 配置横幅需按请求读取环境变量，避免 build 时把 Key 状态写死进静态页
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "启星AI · 首席内训官",
@@ -16,7 +20,10 @@ export default function RootLayout({
     <html lang="zh-CN" className="h-full">
       <body className="min-h-full flex flex-col antialiased">
         <Nav />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 py-8">
+          <ConfigBanner />
+          {children}
+        </main>
         <footer className="border-t border-white/10 py-6 text-center text-xs text-slate-500">
           启星AI 第一阶段 MVP · 模拟与考核期 · 班班的私人教练
         </footer>

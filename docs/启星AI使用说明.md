@@ -109,12 +109,24 @@
 
 ## 4. 启动与局域网访问
 
-### 4.1 安装依赖
+### 4.1 安装依赖并配置密钥
 
 ```bash
 cd /Users/jojo/Desktop/ai/lsj
 npm install
+cp .env.example .env.local
 ```
+
+编辑 `.env.local`，至少填写：
+
+```bash
+AI_API_KEY=你的密钥
+```
+
+未配置密钥时：
+
+- 页面顶部会出现 **黄色提示横幅**
+- 调用对话 / 考核 / 百事通接口会返回明确错误，不会静默失败
 
 ### 4.2 推荐：生产模式（适合局域网分享）
 
@@ -165,27 +177,44 @@ MOCK_AI=1 npm run dev
 
 ---
 
-## 5. AI 接口配置
+## 5. AI 接口配置（环境变量）
 
-配置文件：`lib/xai.ts`
+密钥 **不得** 写进源代码。统一通过环境变量配置，读取逻辑在 `lib/xai.ts`。
 
-当前固定配置：
+### 5.1 变量说明
 
-| 项 | 值 |
-| --- | --- |
-| 网关 | `https://token.xjjj.co/v1` |
-| 接口 | `/chat/completions`（OpenAI 兼容） |
-| 默认模型 | `Qwen3.8-27B-dflash2` |
-| 回退模型 | `qwen3.8-flash` → `Qwen3.8-27B` |
-| API Key | 已写死在 `lib/xai.ts` |
+| 变量 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `AI_API_KEY` | **是** | 无 | 网关 Bearer Token |
+| `AI_API_BASE_URL` | 否 | `https://token.xjjj.co/v1` | OpenAI 兼容网关 |
+| `AI_MODEL` | 否 | `Qwen3.8-27B-dflash2` | 默认对话模型 |
+| `MOCK_AI` | 否 | 关闭 | 设为 `1` 时使用本地模拟回复 |
+
+兼容别名：也支持 `OPENAI_API_KEY` / `OPENAI_BASE_URL`。
+
+回退模型顺序（代码内置）：`AI_MODEL` → `qwen3.8-flash` → `Qwen3.8-27B`
 
 说明：
 
-- 原指定模型 `Qwen3.8-27B` 在网关侧曾出现长时间无响应（curl 超时、0 字节），因此默认切换到可用同系模型，并保留自动回退。
-- 调用时会关闭 thinking（`enable_thinking: false`），降低延迟与空回复风险。
-- 修改模型或密钥：直接编辑 `lib/xai.ts`，然后重新 `npm run build && npm run start`。
+- 原模型 `Qwen3.8-27B` 在网关侧曾出现长时间无响应，因此默认使用 `Qwen3.8-27B-dflash2`
+- 请求会关闭 thinking（`enable_thinking: false`），降低延迟
+- 修改 `.env.local` 后需重启（生产模式需重新 `build && start`）
 
-手工探测示例：
+### 5.2 本地文件约定
+
+| 文件 | 是否提交 Git | 用途 |
+| --- | --- | --- |
+| `.env.example` | ✅ 提交 | 模板，无真实密钥 |
+| `.env.local` | ❌ 忽略 | 本机真实配置 |
+| `.env` / `.env.production` | ❌ 忽略 | 可选环境覆盖 |
+
+### 5.3 未配置 Key 时的表现
+
+1. 全站顶部黄色横幅：提示如何复制 `.env.example` → `.env.local` 并填写 `AI_API_KEY`
+2. API 返回类似：`未配置 AI_API_KEY。请复制 .env.example 为 .env.local...`
+3. 若设置 `MOCK_AI=1`，则显示蓝色演示横幅，可用模拟回复体验流程
+
+### 5.4 手工探测上游
 
 ```bash
 curl https://token.xjjj.co/v1/chat/completions \
@@ -197,6 +226,30 @@ curl https://token.xjjj.co/v1/chat/completions \
     "temperature": 0.7,
     "enable_thinking": false
   }'
+```
+
+### 5.5 推送到 GitHub
+
+```bash
+# 1. 确认本地有 .env.local，且未被 git 跟踪
+git status
+git check-ignore -v .env.local
+
+# 2. 确认代码中没有硬编码密钥
+git grep -n "sk-" -- ':!.env.example' || echo "未发现 sk- 硬编码"
+
+# 3. 正常提交推送
+git add .
+git commit -m "..."
+git push
+```
+
+协作同事克隆后只需：
+
+```bash
+cp .env.example .env.local
+# 填入自己的 AI_API_KEY
+npm install && npm run build && npm run start
 ```
 
 ---
@@ -224,15 +277,17 @@ lsj/
 │   ├── report/               # 考核报告
 │   ├── baishitong/           # 百事通
 │   └── history/              # 历史与反馈
-├── components/               # 通用 UI 组件
+├── components/               # 通用 UI 组件（含 ConfigBanner）
 ├── content/knowledge/        # 百事通种子知识
 ├── docs/                     # 项目文档（本文件）
 ├── lib/
-│   ├── xai.ts                # AI 网关与模型配置
+│   ├── xai.ts                # AI 环境变量读取与调用封装
 │   ├── prompts.ts            # 系统提示词
 │   ├── sessions.ts           # 会话/反馈存储
 │   ├── knowledge.ts          # 知识检索
 │   └── types.ts              # 类型与场景枚举
+├── .env.example              # 环境变量模板（可提交）
+├── .env.local                # 本机密钥（不可提交）
 ├── .data/                    # 本地会话数据（运行后生成，已忽略提交）
 ├── next.config.ts            # Next 配置（含局域网白名单）
 ├── package.json
@@ -258,20 +313,25 @@ lsj/
 原因：开发模式跨域拦截。  
 处理：改用 `npm run build && npm run start`，或给 `allowedDevOrigins` 加 IP。
 
-### Q2：能进页面，但一直对话失败 / 很久没回复？
+### Q2：页面顶部有黄色「尚未配置 AI 密钥」提示？
 
-1. 先测网关是否可用（见第 5 节 curl）  
-2. 确认当前默认模型是否仍可用；必要时在 `lib/xai.ts` 改成 `qwen3.8-flash`  
-3. 看终端报错；页面也会直接显示上游错误信息  
+说明未检测到 `AI_API_KEY`。按横幅步骤创建 `.env.local` 并重启服务。
 
-### Q3：手机打不开局域网地址？
+### Q3：能进页面，但一直对话失败 / 很久没回复？
+
+1. 先确认不是「未配置 Key」问题（见上）  
+2. 测网关是否可用（见第 5 节 curl）  
+3. 在 `.env.local` 把 `AI_MODEL` 改成 `qwen3.8-flash` 后重启  
+4. 看终端与页面错误信息  
+
+### Q4：手机打不开局域网地址？
 
 1. 确认手机与电脑同一 Wi-Fi  
 2. 确认服务已 `start` 且绑定 `0.0.0.0`  
 3. 检查 Mac 防火墙是否拦截 3000 端口  
 4. IP 变更后需重新查看并更新访问地址 / `allowedDevOrigins`
 
-### Q4：如何换成真实叫叫话术库？
+### Q5：如何换成真实叫叫话术库？
 
 替换或补充 `content/knowledge/` 下的 Markdown 文件，重启服务即可被百事通检索使用。
 
@@ -292,6 +352,9 @@ lsj/
 
 ## 11. 验收自检清单
 
+- [ ] 已配置 `.env.local`，且未提交到 Git  
+- [ ] 未配置 Key 时首页有黄色提示  
+- [ ] 配置 Key 后横幅变为绿色「已接入模型」  
 - [ ] `npm run build && npm run start` 成功  
 - [ ] 本机可打开首页  
 - [ ] 局域网设备可打开同一地址  

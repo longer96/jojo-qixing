@@ -15,37 +15,61 @@
 
 ```bash
 npm install
+cp .env.example .env.local
+# 编辑 .env.local，填写 AI_API_KEY=你的密钥
 npm run build
 npm run start
 ```
 
-本机：[http://localhost:3000](http://localhost:3000)  
-局域网：`http://<你的局域网IP>:3000`（已绑定 `0.0.0.0`）
+- 本机：http://localhost:3000  
+- 局域网：`http://<你的局域网IP>:3000`（已绑定 `0.0.0.0`）
 
-> 局域网请优先用 **生产模式**（`npm run start`）。若用 `npm run dev`，需在 `next.config.ts` 的 `allowedDevOrigins` 里加入你的局域网 IP，否则会出现「页面能开、按钮点不动」。
+> 未配置 `AI_API_KEY` 时，页面顶部会显示黄色提示，对话接口也会返回明确错误。  
+> 局域网请优先用生产模式（`npm run start`）。开发模式需配置 `allowedDevOrigins`。
 
-聊天网关：`https://token.xjjj.co/v1`（密钥写在 `lib/xai.ts`）。  
-默认模型：`Qwen3.8-27B-dflash2`（原 `Qwen3.8-27B` 网关侧经常无响应，已内置回退）。
-
-强制演示模式（不走真实接口）：
+临时本地演示（不调真实模型）：
 
 ```bash
-MOCK_AI=1 npm run dev
+MOCK_AI=1 npm run start
+```
+
+## 环境变量
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `AI_API_KEY` | 是 | 网关密钥，放在 `.env.local`，不要提交到 Git |
+| `AI_API_BASE_URL` | 否 | 默认 `https://token.xjjj.co/v1` |
+| `AI_MODEL` | 否 | 默认 `Qwen3.8-27B-dflash2` |
+| `MOCK_AI` | 否 | 设为 `1` 启用本地模拟回复 |
+
+`.env*` 已在 `.gitignore` 中忽略；仅 `.env.example` 会提交。
+
+## 推送到 GitHub 前检查
+
+- [ ] 确认没有提交 `.env.local`
+- [ ] 代码中无硬编码 `sk-...` 密钥
+- [ ] README / 文档中的密钥说明仅为占位符
+
+```bash
+# 自检：不应搜到真实 sk-
+git grep -n "sk-" -- ':!.env.example' ':!docs' || true
 ```
 
 ## 技术栈
 
 - Next.js App Router + TypeScript + Tailwind
-- OpenAI 兼容接口（`token.xjjj.co`）
+- OpenAI 兼容 Chat Completions 网关
 - 会话与反馈落盘在 `.data/`（已 gitignore）
 
 ## 目录要点
 
 ```
 app/                 页面与 API
-components/          UI 组件
+components/          UI 组件（含未配置 Key 提示横幅）
 content/knowledge/   百事通种子知识
+docs/                项目文档
 lib/                 类型、提示词、会话、AI 封装
+.env.example         环境变量模板
 ```
 
 ## 说明
