@@ -1,0 +1,301 @@
+import type { ModelMessage } from "ai";
+
+/** 固定网关与密钥（按产品要求写死） */
+export const API_BASE_URL = "https://token.xjjj.co/v1";
+export const API_KEY =
+  "sk-5tuyolPmp3gIuz3xM2Y9ElYreN6E4hxehugPFpb3HsJk7G0R";
+
+/**
+ * 主模型 Qwen3.8-27B 当前网关经常无响应（curl 40s 超时、0 字节）。
+ * 同系列可用模型：Qwen3.8-27B-dflash2 / qwen3.8-flash
+ */
+export const DEFAULT_MODEL = "Qwen3.8-27B-dflash2";
+export const FALLBACK_MODELS = ["qwen3.8-flash", "Qwen3.8-27B"] as const;
+
+const REQUEST_TIMEOUT_MS = 60_000;
+
+export function isMockMode() {
+  return process.env.MOCK_AI === "1" || process.env.MOCK_AI === "true";
+}
+
+export function hasApiKey() {
+  return Boolean(API_KEY);
+}
+
+type ChatMessageParam = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+function toApiMessages(
+  system: string,
+  messages: ModelMessage[],
+): ChatMessageParam[] {
+  const out: ChatMessageParam[] = [{ role: "system", content: system }];
+  for (const m of messages) {
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    const content =
+      typeof m.content === "string"
+        ? m.content
+        : Array.isArray(m.content)
+          ? m.content
+              .map((part) =>
+                typeof part === "object" &&
+                part &&
+                "type" in part &&
+                part.type === "text" &&
+                "text" in part
+                  ? String(part.text)
+                  : "",
+              )
+              .join("")
+          : String(m.content ?? "");
+    if (!content) continue;
+    out.push({ role: m.role, content });
+  }
+  return out;
+}
+
+async function callChatCompletions(params: {
+  model: string;
+  messages: ChatMessageParam[];
+  temperature: number;
+  stream: boolean;
+}): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: params.model,
+        messages: params.messages,
+        temperature: params.temperature,
+        stream: params.stream,
+        enable_thinking: false,
+        chat_template_kwargs: { enable_thinking: false },
+      }),
+      signal: controller.signal,
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readError(res: Response): Promise<string> {
+  const text = await res.text().catch(() => "");
+  try {
+    const json = JSON.parse(text) as {
+      error?: { message?: string } | string;
+      message?: string;
+    };
+    if (typeof json.error === "string") return json.error;
+    if (json.error && typeof json.error === "object" && json.error.message) {
+      return json.error.message;
+    }
+    if (json.message) return json.message;
+  } catch {
+    // ignore
+  }
+  return text.slice(0, 300) || `上游接口错误 HTTP ${res.status}`;
+}
+
+function extractContent(data: unknown): string {
+  const choice = (
+    data as {
+      choices?: Array<{
+        message?: { content?: string | null };
+        delta?: { content?: string | null };
+      }>;
+    }
+  )?.choices?.[0];
+  const content = choice?.message?.content ?? choice?.delta?.content ?? "";
+  return (content || "").trim();
+}
+
+async function completeOnce(params: {
+  model: string;
+  messages: ChatMessageParam[];
+  temperature: number;
+}): Promise<string> {
+  let res: Response;
+  try {
+    res = await callChatCompletions({ ...params, stream: false });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("abort") || msg.includes("Abort")) {
+      throw new Error(`调用 ${params.model} 超时（${REQUEST_TIMEOUT_MS / 1000}s）`);
+    }
+    throw new Error(`调用 ${params.model} 失败：${msg}`);
+  }
+
+  if (!res.ok) {
+    throw new Error(`调用 ${params.model} 失败：${await readError(res)}`);
+  }
+
+  const data = (await res.json()) as unknown;
+  const text = extractContent(data);
+  if (!text) {
+    throw new Error(`调用 ${params.model} 成功但内容为空`);
+  }
+  return text;
+}
+
+async function completeWithFallback(params: {
+  messages: ChatMessageParam[];
+  temperature: number;
+}): Promise<{ text: string; model: string }> {
+  const models = [DEFAULT_MODEL, ...FALLBACK_MODELS];
+  const errors: string[] = [];
+  for (const model of models) {
+    try {
+      const text = await completeOnce({
+        model,
+        messages: params.messages,
+        temperature: params.temperature,
+      });
+      return { text, model };
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  throw new Error(errors.join(" | "));
+}
+
+function textToStreamResult(text: string, model: string) {
+  return {
+    model,
+    textStream: (async function* () {
+      // 模拟流式，改善前端体验；网关非流式更稳定
+      const chunkSize = 8;
+      for (let i = 0; i < text.length; i += chunkSize) {
+        yield text.slice(i, i + chunkSize);
+        await new Promise((r) => setTimeout(r, 6));
+      }
+    })(),
+  };
+}
+
+export async function chatStream(params: {
+  system: string;
+  messages: ModelMessage[];
+  temperature?: number;
+}) {
+  if (isMockMode()) {
+    return mockStream(params.system, params.messages);
+  }
+
+  const messages = toApiMessages(params.system, params.messages);
+  const { text, model } = await completeWithFallback({
+    messages,
+    temperature: params.temperature ?? 0.7,
+  });
+  return textToStreamResult(text, model);
+}
+
+export async function chatText(params: {
+  system: string;
+  prompt: string;
+  temperature?: number;
+}) {
+  if (isMockMode()) {
+    return mockEvaluateOrText(params.system, params.prompt);
+  }
+
+  const { text } = await completeWithFallback({
+    messages: [
+      { role: "system", content: params.system },
+      { role: "user", content: params.prompt },
+    ],
+    temperature: params.temperature ?? 0.4,
+  });
+  return text;
+}
+
+function mockParentReply(lastUser: string): string {
+  const snippets = [
+    `嗯……你这么说我还是有点担心。我家孩子上周作业也不太认真，你们到底怎么保证效果？`,
+    `说得轻巧。别的机构也这么讲，我更想听到具体安排，而不是空话。`,
+    `……（沉默几秒）那你们班里大概什么水平？我家孩子跟得上吗？`,
+    `好吧我听你解释一下。不过价格这块真的不便宜，你再帮我想想有没有更合适的方案？`,
+  ];
+  const idx = Math.abs(hash(lastUser)) % snippets.length;
+  return snippets[idx];
+}
+
+function mockBaishitongReply(question: string): string {
+  return `【演示模式】关于「${question.slice(0, 40)}」：建议先共情家长情绪，再澄清具体原因（效果/时间/价格/服务），最后给出可执行的下一步与跟进时间。\n\n参考依据：内置 SOP《退费挽单四因应对》《续费价值传递结构》。\n\n（当前为 MOCK_AI，回复为本地演示内容。）`;
+}
+
+async function mockStream(system: string, messages: ModelMessage[]) {
+  const lastUser =
+    [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  const text =
+    typeof lastUser === "string"
+      ? system.includes("百事通")
+        ? mockBaishitongReply(lastUser)
+        : mockParentReply(lastUser)
+      : mockParentReply("你好");
+  return textToStreamResult(text, "mock");
+}
+
+function mockEvaluateOrText(system: string, prompt: string): string {
+  if (system.includes("考核官") || prompt.includes("考核") || prompt.includes("dimensions")) {
+    return JSON.stringify({
+      overallScore: 78,
+      dimensions: [
+        {
+          name: "沟通流畅度",
+          score: 80,
+          comment: "表达基本顺畅，偶有停顿与重复。",
+        },
+        {
+          name: "关键话术命中率",
+          score: 75,
+          comment: "提到了共情与方案，但对成果证据引用不足。",
+        },
+        {
+          name: "异议处理有效性",
+          score: 78,
+          comment: "能回应表层异议，深层顾虑挖掘还可以更深。",
+        },
+        {
+          name: "情绪稳定性",
+          score: 82,
+          comment: "整体冷静，未与家长情绪对抗。",
+        },
+      ],
+      suggestions: [
+        "先复述家长担心，再给一个具体学习证据。",
+        "把「我们会跟进」改成「今晚 8 点前发学习记录给你」。",
+        "异议出现时用开放式问题挖真因，避免急于推销。",
+        "收尾时确认家长是否还有未说出口的顾虑。",
+      ],
+      rewrites: [
+        {
+          original: "您放心，我们效果很好的。",
+          improved:
+            "我特别理解您对效果的担心。孩子上周识字正确率从 60% 提到 78%，我们这周会针对性加练阅读理解，并在周五把进度发给您。",
+          reason: "用数据替代空泛承诺，并给出跟进节奏。",
+        },
+      ],
+      summary:
+        "整体达到合格偏上水平：情绪稳定、流程完整，下一步重点是用证据说话并深化异议挖掘。",
+    });
+  }
+  if (system.includes("运营教练") || prompt.includes("思路提示")) {
+    return "先把家长这句话里的情绪接住，再用一个开放式问题确认真正卡点（价格本身，还是性价比/对比焦虑），最后只给一个可执行的小方案，不要一次抛一堆政策。";
+  }
+  return mockBaishitongReply(prompt);
+}
+
+function hash(s: string) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
