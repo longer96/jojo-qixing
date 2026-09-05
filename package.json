@@ -12,12 +12,17 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.50",
     "@ai-sdk/xai": "^4.0.48",
+    "@napi-rs/canvas": "^1.0.8",
     "ai": "^7.0.83",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.2",
     "next": "16.3.3",
     "openai": "^7.8.0",
+    "pdf-parse": "^2.4.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "uuid": "^14.0.2",
+    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

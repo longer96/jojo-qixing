@@ -10,6 +10,15 @@
 - **智能考核**：沟通流畅度、关键话术命中率、异议处理有效性、情绪稳定性 + 优化建议
 - **百事通**：内置 SOP 知识检索问答
 - **准确性闭环**：对 AI 回复点推荐 / 不推荐，可在「历史与反馈」查看
+- **身份隔离**：首次使用提示设置昵称/工号；对练记录与反馈按身份隔离；不设置身份则不保留历史记录；使用中清除身份会立即结束当前功能（记录保留在原身份名下）
+- **移动端 H5**：桌面与手机浏览器均可使用
+- **知识库体系**（`/admin`）：支持 Word(.docx) / PPT(.pptx) / Excel(.xlsx/.xls) / PDF(.pdf) / md / txt 上传入库，手动新建 / 编辑 / 启停 / 删除，七类分类（炸群/学触/续费/退费/SOP/产品知识/优秀案例）
+- **批量导入总入口**（`/admin` 顶部拖拽区）：一次丢入最多 20 个文件，按文件名+内容关键词自动归类到对应知识模块；同名文件重复导入自动覆盖更新，避免重复文档
+- **知识修正闭环**：百事通回答下方「修正知识」提交纠错/补充 → `/admin` 修正审核 Tab 编辑审核 → 通过后以「修正补充」块写入目标文档并重新向量化
+- **向量检索**：Embedding + 本地向量库，向量与关键词混合打分；网关不支持 embeddings 时自动降级关键词；回答标注引用来源
+- **知识自增长**：百事通回答点「推荐」→ 待审核池 → 管理员选分类确认后沉淀进知识库
+- **个性化作答**：融合①本人历史考核薄弱项 ②全员高频问题统计 ③知识库检索
+- **抽检视图**（`/admin` 第三 Tab）：全量对练会话、反馈记录、高频问题统计（组长/主管闭环）
 
 ## 快速开始
 
@@ -37,12 +46,32 @@ MOCK_AI=1 npm run start
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `AI_API_KEY` | 是 | 网关密钥，放在 `.env.local`，不要提交到 Git |
-| `AI_API_BASE_URL` | 否 | 默认 `https://token.xjjj.co/v1` |
+| `AI_API_KEY` | 是 | 网关密钥，放在 `.env.local`，不要提交到 Git（兜底变量名 `OPENAI_API_KEY`） |
+| `AI_API_BASE_URL` | 否 | 默认 `https://token.xjjj.co/v1`（兜底变量名 `OPENAI_BASE_URL`） |
 | `AI_MODEL` | 否 | 默认 `Qwen3.8-27B-dflash2` |
+| `AI_FALLBACK_MODELS` | 否 | 主模型失败时的回退模型链，逗号分隔；自定义 `AI_MODEL` 后默认不回退 |
+| `AI_EMBEDDING_MODEL` | 否 | 知识库向量检索的 Embedding 模型，默认 `text-embedding-3-small`；网关不支持时自动降级关键词检索 |
 | `MOCK_AI` | 否 | 设为 `1` 启用本地模拟回复 |
 
 `.env*` 已在 `.gitignore` 中忽略；仅 `.env.example` 会提交。
+
+### 切换其他模型 / 网关
+
+本项目走 **OpenAI 兼容 Chat Completions** 协议，更换模型只需改 `.env.local` 三个变量，例如：
+
+```bash
+# DeepSeek
+AI_API_KEY=sk-你的deepseek密钥
+AI_API_BASE_URL=https://api.deepseek.com/v1
+AI_MODEL=deepseek-chat
+
+# 豆包方舟
+AI_API_KEY=你的方舟密钥
+AI_API_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+AI_MODEL=doubao-pro-32k
+```
+
+改完执行 `npm run build && npm run start` 重启生效。页面顶部绿色横幅会显示当前接入的模型与网关。
 
 ## 推送到 GitHub 前检查
 

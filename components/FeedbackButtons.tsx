@@ -1,5 +1,6 @@
 "use client";
 
+import { userHeaders } from "@/lib/identity";
 import { useState } from "react";
 
 export function FeedbackButtons(props: {
@@ -8,6 +9,7 @@ export function FeedbackButtons(props: {
   messageId?: string;
 }) {
   const [rating, setRating] = useState<"up" | "down" | null>(null);
+  const [skipped, setSkipped] = useState(false);
   const [pending, setPending] = useState(false);
 
   async function submit(next: "up" | "down") {
@@ -16,7 +18,7 @@ export function FeedbackButtons(props: {
     try {
       const res = await fetch("/api/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...userHeaders() },
         body: JSON.stringify({
           target: props.target,
           sessionId: props.sessionId,
@@ -24,7 +26,11 @@ export function FeedbackButtons(props: {
           rating: next,
         }),
       });
-      if (res.ok) setRating(next);
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.skipped) setSkipped(true);
+        setRating(next);
+      }
     } finally {
       setPending(false);
     }
@@ -53,7 +59,10 @@ export function FeedbackButtons(props: {
       >
         不推荐
       </button>
-      {rating && <span className="text-slate-500">已记录</span>}
+      {rating && !skipped && <span className="text-slate-500">已记录</span>}
+      {rating && skipped && (
+        <span className="text-amber-400/80">未设置身份，未保留</span>
+      )}
     </div>
   );
 }

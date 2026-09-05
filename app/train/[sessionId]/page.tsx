@@ -1,6 +1,8 @@
 "use client";
 
 import { FeedbackButtons } from "@/components/FeedbackButtons";
+import { IdentityClearedOverlay } from "@/components/IdentityClearedOverlay";
+import { useIdentityCleared } from "@/lib/useIdentityCleared";
 import type { ChatMessage, TrainSession } from "@/lib/types";
 import { SCENARIOS } from "@/lib/types";
 import { useParams, useRouter } from "next/navigation";
@@ -20,6 +22,13 @@ export default function TrainSessionPage() {
   const [mock, setMock] = useState(false);
   const bootstrapped = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const streamCtl = useRef<AbortController | null>(null);
+  const identityCleared = useIdentityCleared();
+
+  // 使用中清除身份：立即中止正在进行的流式对话，已有记录保留在服务端
+  useEffect(() => {
+    if (identityCleared) streamCtl.current?.abort();
+  }, [identityCleared]);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/sessions/${sessionId}`);
@@ -62,11 +71,14 @@ export default function TrainSessionPage() {
     bootstrapped.current = true;
     setStreaming(true);
     setError("");
+    const ctl = new AbortController();
+    streamCtl.current = ctl;
     try {
       const res = await fetch("/api/train/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, bootstrap: true }),
+        signal: ctl.signal,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -87,8 +99,10 @@ export default function TrainSessionPage() {
       await load();
       if (!draft) await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "开场失败");
-      bootstrapped.current = false;
+      if (!ctl.signal.aborted) {
+        setError(e instanceof Error ? e.message : "开场失败");
+        bootstrapped.current = false;
+      }
     } finally {
       setStreaming(false);
     }
@@ -103,11 +117,13 @@ export default function TrainSessionPage() {
 
   async function send() {
     const text = input.trim();
-    if (!text || streaming) return;
+    if (!text || streaming || identityCleared) return;
     setInput("");
     setHint("");
     setStreaming(true);
     setError("");
+    const ctl = new AbortController();
+    streamCtl.current = ctl;
 
     const optimistic: ChatMessage = {
       id: `local-${Date.now()}`,
@@ -131,6 +147,7 @@ export default function TrainSessionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, message: text }),
+        signal: ctl.signal,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -148,8 +165,10 @@ export default function TrainSessionPage() {
       });
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "发送失败");
-      await load();
+      if (!ctl.signal.aborted) {
+        setError(e instanceof Error ? e.message : "发送失败");
+        await load();
+      }
     } finally {
       setStreaming(false);
     }
@@ -201,7 +220,7 @@ export default function TrainSessionPage() {
   const rounds = messages.filter((m) => m.role === "user").length;
 
   return (
-    <div className="flex h-[calc(100vh-8.5rem)] flex-col gap-4">
+    <div className="flex h-[calc(100dvh-8.5rem)] flex-col gap-3 sm:gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
         <div>
           <div className="font-semibold text-white">
@@ -252,7 +271,7 @@ export default function TrainSessionPage() {
             className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 ${
+              className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 text-sm leading-6 sm:max-w-[85%] sm:px-4 sm:py-3 ${
                 m.role === "user"
                   ? "bg-cyan-500/20 text-cyan-50"
                   : "bg-white/10 text-slate-100"
@@ -285,18 +304,20 @@ export default function TrainSessionPage() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          disabled={streaming || session.status === "evaluated"}
+          disabled={streaming || identityCleared || session.status === "evaluated"}
           placeholder="输入你要对家长说的话…"
-          className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/50"
+          className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-3 text-base text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/50 sm:text-sm"
         />
         <button
           type="submit"
-          disabled={streaming || !input.trim()}
+          disabled={streaming || identityCleared || !input.trim()}
           className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 disabled:opacity-50"
         >
           发送
         </button>
       </form>
+
+      <IdentityClearedOverlay visible={identityCleared} detail="本次对练" />
     </div>
   );
 }

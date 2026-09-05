@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSession } from "@/lib/sessions";
+import { getRequestUser } from "@/lib/user";
 import {
   PERSONAS,
   REFUND_REASONS,
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
       scenarioId,
       persona,
       refundReason: scenarioId === "tuifei" ? refundReason ?? "效果" : undefined,
+      owner: getRequestUser(req),
     });
 
     return NextResponse.json({ session });

@@ -1,19 +1,31 @@
 "use client";
 
+import {
+  getIdentity,
+  IDENTITY_EVENT,
+  subscribeIdentity,
+  userHeaders,
+} from "@/lib/identity";
 import type { FeedbackItem, TrainSession } from "@/lib/types";
 import { SCENARIOS } from "@/lib/types";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<TrainSession[]>([]);
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
   const [error, setError] = useState("");
+  // null 表示 SSR/水合阶段，此时不渲染匿名提示，避免闪现
+  const identity = useSyncExternalStore<string | null>(
+    subscribeIdentity,
+    getIdentity,
+    () => null,
+  );
 
-  useEffect(() => {
+  const load = useCallback(() => {
     Promise.all([
-      fetch("/api/sessions").then((r) => r.json()),
-      fetch("/api/feedback").then((r) => r.json()),
+      fetch("/api/sessions", { headers: userHeaders() }).then((r) => r.json()),
+      fetch("/api/feedback", { headers: userHeaders() }).then((r) => r.json()),
     ])
       .then(([s, f]) => {
         setSessions(s.sessions || []);
@@ -22,16 +34,28 @@ export default function HistoryPage() {
       .catch(() => setError("加载历史失败"));
   }, []);
 
+  useEffect(() => {
+    load();
+    window.addEventListener(IDENTITY_EVENT, load);
+    return () => window.removeEventListener(IDENTITY_EVENT, load);
+  }, [load]);
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-white sm:text-3xl">历史与反馈</h1>
         <p className="mt-2 text-sm text-slate-400">
-          查看对练记录与「推荐 / 不推荐」准确性闭环数据。
+          查看对练记录与「推荐 / 不推荐」准确性闭环数据。仅显示当前身份（右上角徽章）名下的记录。
         </p>
       </div>
 
       {error && <p className="text-rose-300">{error}</p>}
+
+      {identity === "" && (
+        <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+          你还未设置身份，当前不保留任何历史记录。点击右上角「设置身份」徽章，设置昵称/工号后即可保留并查看你的对练与反馈记录。
+        </div>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-white">对练会话</h2>

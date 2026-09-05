@@ -32,6 +32,19 @@ export const DEFAULT_MODEL = process.env.AI_MODEL?.trim() || "Qwen3.8-27B-dflash
 
 export const FALLBACK_MODELS = ["qwen3.8-flash", "Qwen3.8-27B"] as const;
 
+/**
+ * 回退模型链：可用 AI_FALLBACK_MODELS（逗号分隔）覆盖。
+ * 未显式指定 AI_MODEL 时，沿用默认网关的 Qwen 回退链；
+ * 显式配置了其他模型/网关时默认不回退，避免向网关上不存在的模型发请求。
+ */
+export function getFallbackModels(): string[] {
+  const fromEnv = process.env.AI_FALLBACK_MODELS?.split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  return process.env.AI_MODEL?.trim() ? [] : [...FALLBACK_MODELS];
+}
+
 const REQUEST_TIMEOUT_MS = 60_000;
 
 export function isMockMode() {
@@ -200,7 +213,7 @@ async function completeWithFallback(params: {
   messages: ChatMessageParam[];
   temperature: number;
 }): Promise<{ text: string; model: string }> {
-  const models = [getDefaultModel(), ...FALLBACK_MODELS];
+  const models = [getDefaultModel(), ...getFallbackModels()];
   const errors: string[] = [];
   for (const model of models) {
     try {

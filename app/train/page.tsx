@@ -1,5 +1,6 @@
 "use client";
 
+import { userHeaders } from "@/lib/identity";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
@@ -26,7 +27,7 @@ export default function TrainPage() {
     try {
       const res = await fetch("/api/train/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...userHeaders() },
         body: JSON.stringify({
           scenarioId,
           persona,

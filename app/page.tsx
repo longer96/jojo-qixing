@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function HomePage() {
   return (
     <div className="space-y-10">
-      <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl shadow-cyan-950/40 sm:p-12">
+      <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-cyan-950/40 sm:p-12">
         <p className="text-sm font-medium tracking-widest text-cyan-300/90">
           运营「星」大脑 · 第一阶段
         </p>
