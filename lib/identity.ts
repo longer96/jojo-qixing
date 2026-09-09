@@ -32,10 +32,15 @@ export function setIdentity(name: string) {
   }
 }
 
-/** 需要归属隔离的请求统一携带身份头 */
+/**
+ * 需要归属隔离的请求统一携带身份头。
+ * 必须 encodeURIComponent：HTTP header 仅允许 ISO-8859-1，
+ * 中文昵称直接写入会在浏览器抛
+ * “字符串包含非ISO-8859-1编码点”。
+ */
 export function userHeaders(): Record<string, string> {
   const name = getIdentity();
-  return name ? { "x-qixing-user": name } : {};
+  return name ? { "x-qixing-user": encodeURIComponent(name) } : {};
 }
 
 /** 订阅身份变化（含跨标签页 storage 事件），供 useSyncExternalStore 使用 */

@@ -13,7 +13,15 @@ export function isAnonymousUser(user: string): boolean {
 export function getRequestUser(req: Request): string {
   const raw = req.headers.get(USER_HEADER)?.trim() ?? "";
   if (!raw) return ANONYMOUS_USER;
+  // 客户端对昵称做了 encodeURIComponent（HTTP header 仅允许 ISO-8859-1）
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // 兼容未编码的旧请求头
+    decoded = raw;
+  }
   // 限制长度并去掉控制字符，避免异常输入写爆存储
-  const cleaned = raw.replace(/[\x00-\x1f]/g, "").slice(0, 32);
+  const cleaned = decoded.replace(/[\x00-\x1f]/g, "").slice(0, 32);
   return cleaned || ANONYMOUS_USER;
 }
