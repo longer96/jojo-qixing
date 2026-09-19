@@ -4,6 +4,9 @@ export type ParentPersona = "焦虑型" | "挑剔型" | "沉默型" | "捧场型
 
 export type RefundReason = "效果" | "时间" | "价格" | "服务";
 
+/** 对练难度旋钮：新手 / 熟手 / 骨干（对应家长提示词第四节） */
+export type TrainDifficulty = "novice" | "skilled" | "master";
+
 export type ChatRole = "user" | "assistant" | "system";
 
 export interface ChatMessage {
@@ -18,8 +21,15 @@ export interface TrainSession {
   /** 会话归属人（昵称/工号），缺省视为 anonymous */
   owner?: string;
   scenarioId: ScenarioId;
-  persona: ParentPersona;
+  /** 人设 id（lib/personas.ts）；旧会话可能存的是中文短名，读取时用 getPersona 兼容 */
+  persona: string;
   refundReason?: RefundReason;
+  /** 难度旋钮，缺省视为 skilled（熟手） */
+  difficulty?: TrainDifficulty;
+  /** 场景×人设为 ⚠️ 非典型组合时置 true */
+  atypical?: boolean;
+  /** 对练前查看了场景提示（标注用，不影响分数） */
+  viewedTips?: boolean;
   messages: ChatMessage[];
   createdAt: string;
   updatedAt: string;
@@ -84,12 +94,8 @@ export const SCENARIOS: Record<
   },
 };
 
-export const PERSONAS: ParentPersona[] = [
-  "焦虑型",
-  "挑剔型",
-  "沉默型",
-  "捧场型",
-];
+// 人设库已迁移至 lib/personas.ts（14 个角色 + 适配矩阵 + 难度分层）。
+// ParentPersona 仅保留用于兼容旧会话数据，新代码请使用 personas.ts。
 
 export const REFUND_REASONS: RefundReason[] = [
   "效果",

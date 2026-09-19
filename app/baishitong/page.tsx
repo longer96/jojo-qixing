@@ -29,6 +29,8 @@ export default function BaishitongPage() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
+  // 本次回答是否命中知识库：未命中时提示「仅供参考」
+  const [noKnowledge, setNoKnowledge] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const streamCtl = useRef<AbortController | null>(null);
   const identityCleared = useIdentityCleared();
@@ -118,6 +120,7 @@ export default function BaishitongPage() {
       const knowledgeIds = (res.headers.get("X-Knowledge-Ids") ?? "")
         .split(",")
         .filter(Boolean);
+      setNoKnowledge(res.headers.get("X-Knowledge-Hit") === "0");
       const sourceTitles = knowledgeIds
         .map((id) => catalogRef.current.get(id))
         .filter((t): t is string => Boolean(t));
@@ -170,6 +173,12 @@ export default function BaishitongPage() {
       {error && (
         <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-sm text-rose-200">
           {error}
+        </div>
+      )}
+
+      {noKnowledge && !streaming && (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-100">
+          知识库未覆盖该问题，以上回答仅供参考。可点回答下方「修正知识」提交补充，或联系管理员在后台录入。
         </div>
       )}
 

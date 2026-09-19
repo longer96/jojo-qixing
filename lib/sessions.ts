@@ -4,9 +4,9 @@ import { DATA_DIR, readJson, withLock, writeJsonAtomic } from "./fileStore";
 import type {
   EvaluationReport,
   FeedbackItem,
-  ParentPersona,
   RefundReason,
   ScenarioId,
+  TrainDifficulty,
   TrainSession,
 } from "./types";
 
@@ -25,8 +25,12 @@ function writeStore(store: Store) {
 
 export async function createSession(input: {
   scenarioId: ScenarioId;
-  persona: ParentPersona;
+  /** 人设 id（lib/personas.ts） */
+  persona: string;
   refundReason?: RefundReason;
+  difficulty?: TrainDifficulty;
+  atypical?: boolean;
+  viewedTips?: boolean;
   owner?: string;
 }): Promise<TrainSession> {
   return withLock(async () => {
@@ -38,6 +42,9 @@ export async function createSession(input: {
       scenarioId: input.scenarioId,
       persona: input.persona,
       refundReason: input.refundReason,
+      difficulty: input.difficulty,
+      atypical: input.atypical,
+      viewedTips: input.viewedTips,
       messages: [],
       createdAt: now,
       updatedAt: now,
@@ -68,6 +75,18 @@ export async function saveSession(session: TrainSession): Promise<TrainSession> 
     store[session.id] = session;
     await writeStore(store);
     return session;
+  });
+}
+
+/** 「这局不算，重来」：删除未考核的会话，返回是否删除成功 */
+export async function deleteSession(id: string): Promise<boolean> {
+  return withLock(async () => {
+    const store = await readStore();
+    const session = store[id];
+    if (!session || session.status === "evaluated") return false;
+    delete store[id];
+    await writeStore(store);
+    return true;
   });
 }
 

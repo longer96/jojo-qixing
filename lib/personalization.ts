@@ -10,6 +10,28 @@ const WEAK_SCORE_THRESHOLD = 75;
  * ② 全员高频问题统计（来自全量问答历史）
  * 与知识库检索结果一起注入系统提示词。
  */
+/** 该用户历史考核中偏弱维度名（按偏弱次数排序，最多 3 个），匿名返回空 */
+export async function getWeakDimensionNames(owner: string): Promise<string[]> {
+  if (owner === ANONYMOUS_USER) return [];
+  const sessions = await listSessions(owner);
+  const weak = new Map<string, { count: number; total: number }>();
+  for (const s of sessions) {
+    if (!s.report) continue;
+    for (const d of s.report.dimensions) {
+      if (d.score < WEAK_SCORE_THRESHOLD) {
+        const cur = weak.get(d.name) ?? { count: 0, total: 0 };
+        cur.count += 1;
+        cur.total += d.score;
+        weak.set(d.name, cur);
+      }
+    }
+  }
+  return [...weak.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 3)
+    .map(([name]) => name);
+}
+
 export async function buildPersonalizationContext(
   owner: string,
 ): Promise<string> {

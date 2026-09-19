@@ -72,6 +72,18 @@ type Tab = "knowledge" | "review" | "correction" | "inspection";
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("knowledge");
+  const [aiConfig, setAiConfig] = useState<{
+    kind: string;
+    model?: string;
+    baseUrl?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/config")
+      .then((r) => r.json())
+      .then(setAiConfig)
+      .catch(() => undefined);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -82,6 +94,15 @@ export default function AdminPage() {
         <p className="mt-2 text-sm text-slate-400">
           自建知识库（Word 上传/编辑/启停）、推荐回答审核沉淀、组长/主管抽检视图。
         </p>
+        {aiConfig && (
+          <p className="mt-1 text-xs text-slate-500">
+            {aiConfig.kind === "ok" &&
+              `当前模型：${aiConfig.model}（${aiConfig.baseUrl}）`}
+            {aiConfig.kind === "mock" && "当前为 MOCK_AI 演示模式"}
+            {aiConfig.kind === "missing_key" &&
+              "未配置 AI 密钥，对话功能不可用"}
+          </p>
+        )}
       </div>
 
       <div className="flex gap-2 border-b border-white/10 pb-px">
@@ -398,6 +419,24 @@ function KnowledgeTab() {
     }
   }
 
+  // 话术蒸馏：从高分对局提炼话术，生成优秀案例草稿（默认停用，审核后启用）
+  async function distill() {
+    setNotice("正在蒸馏高分对局话术…");
+    setError("");
+    try {
+      const res = await fetch("/api/admin/distill", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "蒸馏失败");
+      setNotice(
+        `蒸馏完成：从 ${data.samples} 局高分对局提炼 ${data.count} 条话术，已生成优秀案例草稿（默认停用，审核后启用）`,
+      );
+      load();
+    } catch (err) {
+      setNotice("");
+      setError(err instanceof Error ? err.message : "蒸馏失败");
+    }
+  }
+
   async function toggle(doc: AdminDoc) {
     await fetch(`/api/admin/knowledge/${doc.id}`, {
       method: "PATCH",
@@ -479,16 +518,25 @@ function KnowledgeTab() {
         >
           全部（{docs.length}）
         </button>
-        {KNOWLEDGE_CATEGORY_LIST.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setFilter(c.id)}
-            className={`rounded-full px-3 py-1.5 text-xs ${filter === c.id ? "bg-indigo-500 text-white" : "bg-white/10 text-slate-300"}`}
-          >
-            {c.label}（{docs.filter((d) => d.category === c.id).length}）
-          </button>
-        ))}
+        {KNOWLEDGE_CATEGORY_LIST.map((c) => {
+          const count = docs.filter((d) => d.category === c.id).length;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setFilter(c.id)}
+              className={`rounded-full px-3 py-1.5 text-xs ${
+                filter === c.id
+                  ? "bg-indigo-500 text-white"
+                  : count === 0
+                    ? "bg-rose-400/10 text-rose-300"
+                    : "bg-white/10 text-slate-300"
+              }`}
+            >
+              {c.label}（{count}）
+            </button>
+          );
+        })}
         <span className="flex-1" />
         <button
           type="button"
@@ -503,6 +551,13 @@ function KnowledgeTab() {
           className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10"
         >
           重建向量
+        </button>
+        <button
+          type="button"
+          onClick={distill}
+          className="rounded-full border border-amber-400/30 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-400/10"
+        >
+          话术蒸馏
         </button>
       </div>
 

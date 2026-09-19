@@ -1,6 +1,7 @@
+import { listSessions } from "@/lib/sessions";
 import { getAiConfigStatus } from "@/lib/xai";
 
-export function ConfigBanner() {
+export async function ConfigBanner() {
   const status = getAiConfigStatus();
 
   if (status.kind === "missing_key") {
@@ -38,10 +39,17 @@ export function ConfigBanner() {
     );
   }
 
+  // 前台不暴露模型/网关（内部信息移至 /admin），展示对用户有用的今日练习场次
+  const today = new Date().toDateString();
+  const sessions = await listSessions();
+  const todayCount = sessions.filter(
+    (s) => new Date(s.updatedAt).toDateString() === today,
+  ).length;
+
   return (
     <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
-      已接入模型 <code className="mx-1 rounded bg-black/20 px-1">{status.model}</code>
-      <span className="text-emerald-100/70">（{status.baseUrl}）</span>
+      今日已练 <span className="font-semibold">{todayCount}</span> 场
+      <span className="text-emerald-100/70"> · 坚持对练，每天都有进步</span>
     </div>
   );
 }

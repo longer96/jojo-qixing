@@ -2,6 +2,7 @@
 
 import { FeedbackButtons } from "@/components/FeedbackButtons";
 import { IdentityClearedOverlay } from "@/components/IdentityClearedOverlay";
+import { DIFFICULTY_LABELS, personaDisplayName } from "@/lib/personas";
 import { useIdentityCleared } from "@/lib/useIdentityCleared";
 import type { ChatMessage, TrainSession } from "@/lib/types";
 import { SCENARIOS } from "@/lib/types";
@@ -190,6 +191,14 @@ export default function TrainSessionPage() {
     }
   }
 
+  // 这局不算，重来：删除未考核会话并返回选人页
+  async function restart() {
+    if (!window.confirm("确定放弃本局并删除记录？该操作不可恢复。")) return;
+    streamCtl.current?.abort();
+    await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+    router.push("/train");
+  }
+
   async function finish() {
     setEvaluating(true);
     setError("");
@@ -223,15 +232,38 @@ export default function TrainSessionPage() {
     <div className="flex h-[calc(100dvh-8.5rem)] flex-col gap-3 sm:gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
         <div>
-          <div className="font-semibold text-white">
-            {scenario.name} · {session.persona}家长
-            {session.refundReason ? ` · 退费原因：${session.refundReason}` : ""}
+          <div className="flex flex-wrap items-center gap-2 font-semibold text-white">
+            <span>
+              {scenario.name} · {personaDisplayName(session.persona)}
+              {session.refundReason ? ` · 退费原因：${session.refundReason}` : ""}
+            </span>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-normal text-slate-300">
+              {DIFFICULTY_LABELS[session.difficulty ?? "skilled"]}难度
+            </span>
+            {session.atypical && (
+              <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-normal text-amber-200">
+                非典型组合
+              </span>
+            )}
+            {session.viewedTips && (
+              <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-normal text-amber-200">
+                已查看提示
+              </span>
+            )}
           </div>
           <div className="text-xs text-slate-400">
             已进行 {rounds} 轮 · {mock ? "演示模式" : "Qwen"} · 你是班班，AI 是家长
           </div>
         </div>
         <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={streaming || evaluating || session.status === "evaluated"}
+            onClick={restart}
+            className="rounded-full border border-rose-400/30 px-4 py-2 text-xs text-rose-300 hover:bg-rose-400/10 disabled:opacity-50"
+          >
+            这局不算，重来
+          </button>
           <button
             type="button"
             disabled={streaming}

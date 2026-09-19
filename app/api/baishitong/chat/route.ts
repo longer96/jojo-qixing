@@ -74,6 +74,8 @@ export async function POST(req: Request) {
         "Content-Type": "text/plain; charset=utf-8",
         "X-Mock-AI": isMockMode() ? "1" : "0",
         "X-Knowledge-Ids": docs.map((d) => d.docId).join(","),
+        // 空库/未命中标记：前端据此提示「回答仅供参考」
+        "X-Knowledge-Hit": docs.length > 0 ? "1" : "0",
       },
     });
   } catch (e) {

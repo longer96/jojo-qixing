@@ -34,7 +34,7 @@ export default function RootLayout({
         </main>
         <IdentityPrompt />
         <footer className="border-t border-white/10 py-6 text-center text-xs text-slate-500">
-          启星AI 第一阶段 MVP · 模拟与考核期 · 班班的私人教练
+          启星AI · 首席内训官 · 情景模拟与智能考核 · 班班的私人教练
         </footer>
       </body>
     </html>

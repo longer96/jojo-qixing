@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { personaDisplayName } from "@/lib/personas";
 import { getSession } from "@/lib/sessions";
 import { SCENARIOS } from "@/lib/types";
 import { chatText } from "@/lib/xai";
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
     const hint = await chatText({
       system:
         "你是运营教练。只给班班 1-2 句「思路提示」，不要直接写完整可复制话术，不要扮演家长。",
-      prompt: `场景：${scenario.name}（${scenario.tips}）\n人设：${session.persona}\n最近对话：\n${transcript || "（尚未开始）"}\n请给思路提示：`,
+      prompt: `场景：${scenario.name}（${scenario.tips}）\n人设：${personaDisplayName(session.persona)}\n最近对话：\n${transcript || "（尚未开始）"}\n请给思路提示：`,
       temperature: 0.5,
     });
 

@@ -58,7 +58,7 @@ export function IdentityBadge() {
       >
         <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
         <span className="max-w-20 truncate sm:max-w-28">
-          {name || "设置身份"}
+          {name ? `我：${name}` : "我：未设置"}
         </span>
       </button>
 

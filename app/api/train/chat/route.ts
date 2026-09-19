@@ -1,4 +1,5 @@
 import { type ModelMessage } from "ai";
+import { getWeakDimensionNames } from "@/lib/personalization";
 import { buildOpeningUserCue, buildTrainSystemPrompt } from "@/lib/prompts";
 import { appendMessage, getSession, saveSession } from "@/lib/sessions";
 import { chatStream, isMockMode } from "@/lib/xai";
@@ -24,10 +25,16 @@ export async function POST(req: Request) {
       return Response.json({ error: "会话已结束考核" }, { status: 400 });
     }
 
+    // 记忆施压：把该班班历史薄弱维度注入家长提示词，家长自然地在这些点上追问
+    const weakSpots = session.owner
+      ? await getWeakDimensionNames(session.owner)
+      : [];
     const system = buildTrainSystemPrompt({
       scenarioId: session.scenarioId,
       persona: session.persona,
       refundReason: session.refundReason,
+      difficulty: session.difficulty,
+      weakSpots,
     });
 
     let working = session;

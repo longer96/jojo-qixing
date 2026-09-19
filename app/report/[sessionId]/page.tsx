@@ -1,6 +1,7 @@
 "use client";
 
 import { ScoreBars } from "@/components/ScoreBars";
+import { DIFFICULTY_LABELS, personaDisplayName } from "@/lib/personas";
 import type { TrainSession } from "@/lib/types";
 import { SCENARIOS } from "@/lib/types";
 import Link from "next/link";
@@ -42,7 +43,7 @@ export default function ReportPage() {
   async function copySummary() {
     const text = [
       `启星AI 考核报告`,
-      `场景：${scenario.name} / ${session!.persona}`,
+      `场景：${scenario.name} / ${personaDisplayName(session!.persona)}`,
       `综合：${report.overallScore}`,
       ...report.dimensions.map((d) => `${d.name}: ${d.score} — ${d.comment}`),
       `总评：${report.summary}`,
@@ -60,8 +61,9 @@ export default function ReportPage() {
         <div>
           <h1 className="text-2xl font-semibold text-white sm:text-3xl">智能考核报告</h1>
           <p className="mt-2 text-sm text-slate-400">
-            {scenario.name} · {session.persona}
+            {scenario.name} · {personaDisplayName(session.persona)}
             {session.refundReason ? ` · ${session.refundReason}` : ""}
+            {` · ${DIFFICULTY_LABELS[session.difficulty ?? "skilled"]}难度`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -96,6 +98,26 @@ export default function ReportPage() {
           </ul>
         </section>
       </div>
+
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <h2 className="text-lg font-semibold text-white">标准思路对照</h2>
+        <p className="mt-3 text-sm leading-7 text-slate-300">
+          <span className="text-slate-500">「{scenario.name}」参考思路：</span>
+          {scenario.tips}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          {session.viewedTips && (
+            <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-amber-200">
+              对练前已查看场景提示（本局已标注，不影响分数）
+            </span>
+          )}
+          {session.atypical && (
+            <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-amber-200">
+              本局为「非典型」场景×人设组合
+            </span>
+          )}
+        </div>
+      </section>
 
       {report.rewrites?.length > 0 && (
         <section className="rounded-2xl border border-white/10 bg-white/5 p-6">

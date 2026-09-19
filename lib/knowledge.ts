@@ -20,6 +20,13 @@ const SEED_CATEGORY_MAP: Record<string, KnowledgeCategory> = {
   sensitive: "sop",
 };
 
+/** 种子文件分类：product* 入产品知识，cases* 入优秀案例，其余按映射表 */
+function seedCategoryOf(base: string): KnowledgeCategory {
+  if (base.startsWith("product")) return "product";
+  if (base.startsWith("cases")) return "cases";
+  return SEED_CATEGORY_MAP[base] ?? "sop";
+}
+
 const CHUNK_TARGET = 500;
 
 // ---------- 分块 ----------
@@ -76,16 +83,14 @@ async function embedChunks(
 
 let seeded = false;
 
-/** 首次访问时把 content/knowledge 下的种子 markdown 迁移入库 */
+/**
+ * 首次访问时把 content/knowledge 下的种子 markdown 迁移入库；
+ * 已有库时按标题补齐新增种子（不触碰用户上传内容），保证新版本种子能流入旧部署。
+ */
 async function ensureSeeded() {
   if (seeded) return;
   await withLock(async () => {
     if (seeded) return;
-    const existing = await readJson<KnowledgeDoc[] | null>(KNOWLEDGE_FILE, null);
-    if (existing) {
-      seeded = true;
-      return;
-    }
     let files: string[] = [];
     try {
       files = await fs.readdir(SEED_DIR);
@@ -93,7 +98,7 @@ async function ensureSeeded() {
       files = [];
     }
     const now = new Date().toISOString();
-    const docs: KnowledgeDoc[] = [];
+    const seedDocs: KnowledgeDoc[] = [];
     for (const file of files) {
       if (!file.endsWith(".md")) continue;
       const content = await fs.readFile(path.join(SEED_DIR, file), "utf8");
@@ -104,10 +109,10 @@ async function ensureSeeded() {
           .find((l) => l.startsWith("# "))
           ?.replace(/^#\s+/, "")
           .trim() || base;
-      docs.push({
+      seedDocs.push({
         id: randomUUID(),
         title,
-        category: SEED_CATEGORY_MAP[base] ?? "sop",
+        category: seedCategoryOf(base),
         enabled: true,
         source: "seed",
         chunks: chunkText(content).map((text) => ({
@@ -118,10 +123,25 @@ async function ensureSeeded() {
         updatedAt: now,
       });
     }
-    for (const doc of docs) {
-      await embedChunks(doc.chunks);
+
+    const existing = await readJson<KnowledgeDoc[] | null>(KNOWLEDGE_FILE, null);
+    if (!existing) {
+      for (const doc of seedDocs) {
+        await embedChunks(doc.chunks);
+      }
+      await writeDocs(seedDocs);
+      seeded = true;
+      return;
     }
-    await writeDocs(docs);
+    // 已有库：只补缺失的种子文档
+    const titles = new Set(existing.map((d) => d.title));
+    const missing = seedDocs.filter((d) => !titles.has(d.title));
+    if (missing.length > 0) {
+      for (const doc of missing) {
+        await embedChunks(doc.chunks);
+      }
+      await writeDocs([...existing, ...missing]);
+    }
     seeded = true;
   });
 }
